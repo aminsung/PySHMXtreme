@@ -9,7 +9,6 @@ __status__ = "Final"
 
 import time
 
-import collections
 import numpy as np
 
 import pyshmxtreme.SHMSegment as shmx
