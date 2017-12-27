@@ -124,7 +124,7 @@ class SHMSegment(object):
                 idx_a = self._attr[k]['midx']/self._attr[k]['data'].itemsize
                 idx_b = idx_a + self._attr[k]['size']/self._attr[k]['data'].itemsize
                 self._attr[k]['data'] = data[idx_a:idx_b,0,None]
-                self._attr[k]['data'].reshape(self._attr[k]['shape'])
+                self._attr[k]['data'].shape = self._attr[k]['shape']
 
         retdict = self._attr.copy()
         del retdict['mem']
@@ -134,12 +134,12 @@ class SHMSegment(object):
     def _write_to_mem(self, val):
         '''Write the data to the memory block'''
         for k, v in val.iteritems():
-            if k in self._attr:
-                self._attr[k]['data'] = val[k]['data']
-            else:
-                self._attr[k]['data'] = val[k]['data']
-                self._attr[k]['size'] = val[k]['data'].size * val[k]['data'].itemsize
-                self._attr[k]['shape'] = val[k]['data'].shape
+            # if k in self._attr:
+            #     self._attr[k]['data'] = val[k]['data']
+            # else:
+            self._attr[k]['data'] = val[k]['data']
+            self._attr[k]['size'] = val[k]['data'].size * val[k]['data'].itemsize
+            self._attr[k]['shape'] = val[k]['data'].shape
         self.update_total_segment()
         # Update self.curr_data to a long vector
         self._attr['mem'].seek(0)
