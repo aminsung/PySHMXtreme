@@ -7,7 +7,7 @@ __date__ = "August 23, 2016"
 __version__ = "0.0.1"
 __status__ = "Final"
 
-from distutils.core import setup
+from setuptools import setup
 
 setup(
 	name='PySHMXtreme',
@@ -15,4 +15,8 @@ setup(
 	author='Min Sung Ahn',
 	author_email='aminsung@ucla.edu',
 	packages=['pyshmxtreme'],
+        install_requires=[
+            'numpy',
+            'posix_ipc',
+        ],
 	)
