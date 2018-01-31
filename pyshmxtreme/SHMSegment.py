@@ -9,6 +9,7 @@ __status__ = "Final"
 
 import mmap
 import collections
+import threading
 
 import numpy as np
 import posix_ipc
@@ -25,7 +26,10 @@ class SHMSegment(object):
         '''
         self.robot_name = robot_name
         self._seg_name = seg_name
-        self._attr = collections.defaultdict(lambda: collections.defaultdict(int))
+        self._attr = []
+
+        self._mem_addr = None
+        self._mem_lock = None
 
         self.curr_data = np.empty((1,1))
         self.memsize = 0 # Size of the memory segment
@@ -35,40 +39,45 @@ class SHMSegment(object):
     def add_blocks(self, name, data):
         '''Given name and data, the block will be added to the segment
         Currently, it supports numpy.arrays and strings'''
-        self._attr[name]['name'] = name
+        block = {}
+        block['name'] = name
         # If type of data is numpy array
         if type(data) is np.ndarray:
             # > Create data and size
             self.datatype = np.ndarray
-            self._attr[name]['data'] = data
-            self._attr[name]['size'] = data.size * data.itemsize
-            self._attr[name]['shape'] = data.shape # It is assumed to be an NxN array
+            block['data'] = data
+            block['size'] = data.size * data.itemsize
+            block['shape'] = data.shape
+            block['midx'] = self.memsize
+            self.memsize += block['size']
         elif type(data) is str:
             # > Else, create data and string size
             self.datatype = str
-            self._attr[name]['data'] = data.encode('utf8') # We assume it is a string and encode it UTF-8
-            self._attr[name]['size'] = len(data)
-            self._attr[name]['shape'] = (1,1)
+            block['data'] = data.encode('utf8')
+            block['size'] = len(data)
+            block['shape'] = (1,1)
+
+        self._attr.append(block)
 
     def update_total_segment(self):
         '''Parses the entire memory segment size. To be run after all blocks are added.'''
         self.curr_data = None
-        self.memsize = 0
-        for k, v in self._attr.iteritems():
-            if k != 'mem' and k != 'lock':
-                self._attr[k]['midx'] = self.memsize # Easy tracker for indexing of where the memory starts for k
-                self.memsize += self._attr[k]['size']
-                if self.datatype is np.ndarray:
-                    if self.curr_data is None:
-                        self.curr_data = self._attr[k]['data'].reshape(-1,1)
-                    else:
-                        # If numpy array, make it a very long array of column 1
-                        self.curr_data = np.concatenate((self.curr_data, self._attr[k]['data'].reshape(-1,1)), axis=0)
+        for idx in range(len(self._attr)):
+            if self.datatype is np.ndarray:
+                if self.curr_data is None:
+                    self.curr_data = self._attr[idx]['data'].reshape(-1,1)
+                else:
+                    # If numpy array, make it a very long array of column 1
+                    self.curr_data = np.concatenate((self.curr_data, self._attr[idx]['data'].reshape(-1,1)), axis=0)
 
     def connect_segment(self):
         '''Function that actually creates the memory block'''
         # Make sure to update the total segment first!
         self.update_total_segment()
+
+        # You can't mmap a size zero segment
+        if self.memsize == 0:
+            raise ValueError("Min says: You are trying to create an empty memory block! Add blocks of memory via add_block() method!")
 
         # Path name to be used in /dev/shm
         path_name = "{}_{}".format(self.robot_name, self._seg_name)
@@ -84,67 +93,63 @@ class SHMSegment(object):
 
             # Create the shared memory, semaphore blocks and map it
             mem = posix_ipc.SharedMemory(path_name + "_mem", posix_ipc.O_CREX, size=self.memsize)
-            self._attr['mem'] = mmap.mmap(mem.fd, mem.size)
-            self._attr['lock'] = posix_ipc.Semaphore(path_name + "_lock", posix_ipc.O_CREX)
-            self._attr['lock'].release()
+            self._mem_addr = mmap.mmap(mem.fd, mem.size)
+            self._mem_lock = posix_ipc.Semaphore(path_name + "_lock", posix_ipc.O_CREX)
+            self._mem_lock.release()
 
             # Close the open FD
             mem.close_fd()
         else:
             # Create the shared memory, semaphore blocks and map to a dict
             mem = posix_ipc.SharedMemory(path_name + "_mem")
-            self._attr['mem'] = mmap.mmap(mem.fd, mem.size)
-            self._attr['lock'] = posix_ipc.Semaphore(path_name + "_lock")
-            self._attr['lock'].release()
+            self._mem_addr = mmap.mmap(mem.fd, mem.size)
+            self._mem_lock = posix_ipc.Semaphore(path_name + "_lock")
+            self._mem_lock.release()
 
             mem.close_fd()
 
         self.initialize = False
 
     def set(self, val):
-        '''Update the memory segment with a new set of values
-           Input should be a dictionary with keys as:
-                name
-                    data
+        '''
+            Update the memory segment with a new set of values
+            Input should be a dictionary with key, value as:
+                val = {name : data}
         '''
         # Once lock is retrieved, write to mem:
-        with self._attr['lock']:
+        with self._mem_lock:
             self._write_to_mem(val)
 
     def get(self):
-        '''Get the data that is currently in the shared memory and parse for the user
-        Note that maps memory AND semaphore are also returned. # TODO: Maybe not return this...'''
+        '''Get the data that is currently in the shared memory and parse for the user'''
         # Numpy version
-        # === Retrieve the data
-        with self._attr['lock']:
+        with self._mem_lock:
             data = self._read_from_mem()
-        # === Parse the data
-        for k, v in self._attr.iteritems():
-            if k != 'mem' and k != 'lock':
-                idx_a = self._attr[k]['midx']/self._attr[k]['data'].itemsize
-                idx_b = idx_a + self._attr[k]['size']/self._attr[k]['data'].itemsize
-                self._attr[k]['data'] = data[idx_a:idx_b,0,None]
-                self._attr[k]['data'].shape = self._attr[k]['shape']
 
-        retdict = self._attr.copy()
-        del retdict['mem']
-        del retdict['lock']
+        retdict = {}
+
+        for idx in range(len(self._attr)):
+            idx_a = self._attr[idx]['midx']/self._attr[idx]['data'].itemsize
+            idx_b = idx_a + self._attr[idx]['size']/self._attr[idx]['data'].itemsize
+            self._attr[idx]['data'] = data[idx_a:idx_b,0,None]
+            self._attr[idx]['data'].shape = self._attr[idx]['shape']
+            retdict[self._attr[idx]['name']] = self._attr[idx]['data']
+
         return retdict
+
 
     def _write_to_mem(self, val):
         '''Write the data to the memory block'''
-        for k, v in val.iteritems():
-            # if k in self._attr:
-            #     self._attr[k]['data'] = val[k]['data']
-            # else:
-            self._attr[k]['data'] = val[k]['data']
-            self._attr[k]['size'] = val[k]['data'].size * val[k]['data'].itemsize
-            self._attr[k]['shape'] = val[k]['data'].shape
+        for idx in range(len(self._attr)):
+            if self._attr[idx]['name'] in val:
+                self._attr[idx]['data'] = val[self._attr[idx]['name']]
+
         self.update_total_segment()
-        # Update self.curr_data to a long vector
-        self._attr['mem'].seek(0)
-        self._attr['mem'].write(self.curr_data.data)
+        self._mem_addr.seek(0)
+        self._mem_addr.write(self.curr_data.data)
+
 
     def _read_from_mem(self):
-        self._attr['mem'].seek(0)
-        return np.ndarray(shape=(self.memsize/self.curr_data.itemsize,1), buffer=self._attr['mem'])
+        '''Read from memory'''
+        self._mem_addr.seek(0)
+        return np.ndarray(shape=(self.memsize/self.curr_data.itemsize,1), buffer=self._mem_addr)
