@@ -1,4 +1,5 @@
 # PySHMXtreme
+Last updated: 2018.05.16
 Nice shared memory interface using numpy b/c I couldn't find one that works.
 
 ## Installation Procedures
