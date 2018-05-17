@@ -1,6 +1,11 @@
 # PySHMXtreme
 Nice shared memory interface using numpy b/c I couldn't find one that works.
 
+## Installation Procedures
+```
+pip install .
+```
+
 ## Instructions
 1. First, import pyshmx and create some memory blocks that should be created before running the program.
 MemoryManager.py
@@ -16,7 +21,7 @@ TIME_STATE.add_blocks(name='time', data=np.zeros((1,1)))
 
 2. 
 Setting the memory
-```
+```python
 import MemoryManager
 
 data = {}
@@ -27,7 +32,7 @@ while True:
 
 3.
 Getting the memory
-```
+```python
 import MemoryManager
 
 while True:
