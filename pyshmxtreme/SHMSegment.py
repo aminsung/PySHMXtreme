@@ -50,12 +50,14 @@ class SHMSegment(object):
             block['shape'] = data.shape
             block['midx'] = self.memsize
             self.memsize += block['size']
-        elif type(data) is str:
+        elif type(data) is np.chararray:
             # > Else, create data and string size
-            self.datatype = str
-            block['data'] = data.encode('utf8')
-            block['size'] = len(data)
-            block['shape'] = (1,1)
+	    self.datatype = np.chararray
+            block['data'] = data
+            block['size'] = data.size * data.itemsize
+            block['shape'] = data.shape
+            block['midx'] = self.memsize
+            self.memsize += block['size']
 
         self._attr.append(block)
 
@@ -63,12 +65,11 @@ class SHMSegment(object):
         '''Parses the entire memory segment size. To be run after all blocks are added.'''
         self.curr_data = None
         for idx in range(len(self._attr)):
-            if self.datatype is np.ndarray:
-                if self.curr_data is None:
-                    self.curr_data = self._attr[idx]['data'].reshape(-1,1)
-                else:
-                    # If numpy array, make it a very long array of column 1
-                    self.curr_data = np.concatenate((self.curr_data, self._attr[idx]['data'].reshape(-1,1)), axis=0)
+            if self.curr_data is None:
+                self.curr_data = self._attr[idx]['data'].reshape(-1,1)
+            else:
+                # If numpy array, make it a very long array of column 1
+                self.curr_data = np.concatenate((self.curr_data, self._attr[idx]['data'].reshape(-1,1)), axis=0)
 
     def connect_segment(self):
         '''Function that actually creates the memory block'''
@@ -152,4 +153,8 @@ class SHMSegment(object):
     def _read_from_mem(self):
         '''Read from memory'''
         self._mem_addr.seek(0)
-        return np.ndarray(shape=(self.memsize/self.curr_data.itemsize,1), buffer=self._mem_addr)
+        if self.datatype == np.ndarray:
+            return np.ndarray(shape=(self.memsize/self.curr_data.itemsize,1), buffer=self._mem_addr)
+        elif self.datatype == np.chararray:
+            return np.chararray(shape=(self.memsize/self.curr_data.itemsize,1), buffer=self._mem_addr)
+
