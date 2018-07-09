@@ -52,7 +52,7 @@ class SHMSegment(object):
             self.memsize += block['size']
         elif type(data) is np.chararray:
             # > Else, create data and string size
-	    self.datatype = np.chararray
+            self.datatype = np.chararray
             block['data'] = data
             block['size'] = data.size * data.itemsize
             block['shape'] = data.shape
@@ -130,8 +130,8 @@ class SHMSegment(object):
         retdict = {}
 
         for idx in range(len(self._attr)):
-            idx_a = self._attr[idx]['midx']/self._attr[idx]['data'].itemsize
-            idx_b = idx_a + self._attr[idx]['size']/self._attr[idx]['data'].itemsize
+            idx_a = self._attr[idx]['midx']//self._attr[idx]['data'].itemsize
+            idx_b = idx_a + self._attr[idx]['size']//self._attr[idx]['data'].itemsize
             self._attr[idx]['data'] = data[idx_a:idx_b,0,None]
             self._attr[idx]['data'].shape = self._attr[idx]['shape']
             retdict[self._attr[idx]['name']] = self._attr[idx]['data']
@@ -154,7 +154,7 @@ class SHMSegment(object):
         '''Read from memory'''
         self._mem_addr.seek(0)
         if self.datatype == np.ndarray:
-            return np.ndarray(shape=(self.memsize/self.curr_data.itemsize,1), buffer=self._mem_addr)
+            return np.ndarray(shape=(self.memsize//self.curr_data.itemsize,1), buffer=self._mem_addr)
         elif self.datatype == np.chararray:
-            return np.chararray(shape=(self.memsize/self.curr_data.itemsize,1), buffer=self._mem_addr)
+            return np.chararray(shape=(self.memsize//self.curr_data.itemsize,1), buffer=self._mem_addr)
 
