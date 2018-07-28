@@ -22,6 +22,7 @@ class WriteSharedMem(object):
     def __init__(self, **kwargs):
         self.segment = kwargs.get('segment', None)
         self.block = kwargs.get('block', None)
+        self.arg_num = kwargs.get('arg_num', 0)
 
         if self.segment is None:
             try:
@@ -35,7 +36,11 @@ class WriteSharedMem(object):
 
         def wrapper(*args, **kwargs):
             res = rqst_function(*args, **kwargs)
-            data = {self.block: array(res, dtype=float64)}
+
+            if not self.arg_num:
+                data = {self.block: array(res, dtype=float64)}
+            else:
+                data = {self.block: array(res[self.arg_num], dtype=float64)}
             self.segment.set(data)
             return res
 
