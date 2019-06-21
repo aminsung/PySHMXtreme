@@ -138,6 +138,9 @@ class SHMSegment(object):
 
         return retdict
 
+    def get_seg_name(self):
+        return self._seg_name
+
 
     def _write_to_mem(self, val):
         '''Write the data to the memory block'''
