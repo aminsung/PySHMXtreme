@@ -130,8 +130,8 @@ class SHMSegment(object):
         retdict = {}
 
         for idx in range(len(self._attr)):
-            idx_a = self._attr[idx]['midx']//self._attr[idx]['data'].itemsize
-            idx_b = idx_a + self._attr[idx]['size']//self._attr[idx]['data'].itemsize
+            idx_a = self._attr[idx]['midx']//data.itemsize
+            idx_b = idx_a + self._attr[idx]['size']//data.itemsize
             self._attr[idx]['data'] = data[idx_a:idx_b,0,None]
             self._attr[idx]['data'].shape = self._attr[idx]['shape']
             retdict[self._attr[idx]['name']] = self._attr[idx]['data']
